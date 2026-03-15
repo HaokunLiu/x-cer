@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""
+xnotify - Notify when certain conditions are met
+
+Usage:
+   xnotify <COMMAND> [OPTIONS]
+   xnotify show [OPTIONS]
+   xnotify clear [OPTIONS]
+   xnotify job [OPTIONS] ID_OR_NAME
+   xnotify quota [OPTIONS]
+
+Commands:
+    show: Show all the notification requests
+    clear: Clear all the notification requests
+    job: Notify when certain job conditions are met
+    quota: Notify when certain quota conditions are met
+
+Options:
+    -h, --help           Show help message and exit
+
+Options (show command):
+    -t, --tag TAG              Show notification requests with the given tag pattern
+
+Options (clear command):
+    -t, --tag TAG              Clear notification requests with the given tag pattern
+    --all                      Clear all the notification requests
+
+Arguments (job command):
+    ID_OR_NAME: Job ID or name pattern to cancel (e.g. host:123456, host:123456,host:123457, host:123456..123460, train*)
+    (If not explicitly specified, pure numerical argument string is treated as ID, otherwise as NAME)
+
+Options (job command):
+    -n, --name                 ID_OR_NAME should be treated as job name
+    -i, --id                   ID_OR_NAME should be treated as job ID
+    -p, --preset NAME          Select jobs by preset
+    -c, --cluster CLUSTER      Select jobs by cluster (default: all active clusters)
+    -r, --recur RATE           Resubmit cooldown period for the notification (default: 1d)
+    -e, --email EMAIL          Send email to the given address (default: the email address in the config file)
+    -t, --tag TAG              Manuelly set tag for the notification request
+    --all-done                 Notify when all the jobs are done
+    --any-done                 Notify when any of the jobs are done
+    --num-done NUM             Notify when there are more than NUM done jobs
+    --any-failed               Notify when any of the jobs failed
+    --all-failed               Notify when all the jobs failed
+    --num-failed NUM           Notify when there are more than NUM failed jobs
+
+Options (quota command):
+    -c, --cluster CLUSTER      Select quota usage by cluster (default: all active clusters)
+    -p, --percent PERCENT      Percentage threshold for the quota usage condition (default: 90)
+    -r, --recur RATE           Resubmit cooldown period for the notification (default: 1d)
+    -e, --email EMAIL          Send email to the given address (default: the email address in the config file)
+    -t, --tag TAG              Manuelly set tag for the notification request
+
+Examples:
+    xnotify show --all (show all the notification requests)
+    xnotify show --tag "job*" (show all the notification requests with tag starting with "job")
+    xnotify clear --all (clear all the notification requests)
+    xnotify clear --tag "job*" (clear all the notification requests with tag starting with "job")
+    xnotify job -n --any-failed --all-done train* (notify when all the jobs with name starting with "train" are done or any of them failed)
+    xnotify job -n --num-failed 10 test* (notify when there are more than 10 failed jobs with name starting with "test")
+    xnotify job --all-done -c cluster1 (notify when all the jobs on cluster1 are done)
+    xnotify job --all-done -p 1gpu_48g_12h (notify when all the jobs with preset "1gpu_48g_12h" are done)
+    xnotify quota -p 90 -r 1d (notify when quota usage is above 90%, recur every 1 day)
+    xnotify quota -p 90 -c cluster1,cluster2 (notify when quota usage is above 90% on cluster1 or cluster2)
+
+
+"""
+
+import sys
+import argparse
+
+from xcer.commands import (
+    xnotify_show,
+    xnotify_clear,
+    xnotify_job,
+    xnotify_quota,
+)
+from xcer.utils import expand_combined_flags, maybe_comma_separated_list_str
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Manage notification requests to user email",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        help="Sub-command to run",
+        choices=["show", "clear", "job", "quota"],
+    )
+
+    # show command
+    show_parser = subparsers.add_parser(
+        "show", help="Show all the notification requests"
+    )
+    show_parser.add_argument(
+        "-t", "--tag", help="Show notification requests with the given tag pattern"
+    )
+    show_parser.add_argument(
+        "--all", action="store_true", help="Show all the notification requests"
+    )
+
+    # clear command
+    clear_parser = subparsers.add_parser("clear", help="Clear notification requests")
+    clear_parser.add_argument(
+        "-t", "--tag", help="Clear notification requests with the given tag pattern"
+    )
+    clear_parser.add_argument(
+        "--all", action="store_true", help="Clear all the notification requests"
+    )
+
+    # job command
+    job_parser = subparsers.add_parser(
+        "job", help="Notify when certain job conditions are met"
+    )
+    job_parser.add_argument(
+        "id_or_name",
+        help="Job ID or name to notify",
+        nargs="+",
+        type=maybe_comma_separated_list_str,
+    )
+    job_parser.add_argument("-n", "--name", help="Select jobs by name pattern")
+    job_parser.add_argument("-p", "--preset", help="Select jobs by preset")
+    job_parser.add_argument("-i", "--id", help="Select jobs by ID")
+    job_parser.add_argument(
+        "-c",
+        "--cluster",
+        help="Select jobs by cluster (default: all active clusters)",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    job_parser.add_argument(
+        "-r",
+        "--recur",
+        default="1d",
+        help="Resubmit cooldown period for the notification (default: 1d)",
+    )
+    job_parser.add_argument(
+        "-e",
+        "--email",
+        help="Send email to the given address",
+        default="$EMAIL",
+    )
+    job_parser.add_argument(
+        "--all-done", action="store_true", help="Notify when all the jobs are done"
+    )
+    job_parser.add_argument(
+        "--any-done", action="store_true", help="Notify when any of the jobs are done"
+    )
+    job_parser.add_argument(
+        "--num-done", type=int, help="Notify when there are more than NUM done jobs"
+    )
+    job_parser.add_argument(
+        "--any-failed", action="store_true", help="Notify when any of the jobs failed"
+    )
+    job_parser.add_argument(
+        "--all-failed", action="store_true", help="Notify when all the jobs failed"
+    )
+    job_parser.add_argument(
+        "--num-failed", type=int, help="Notify when there are more than NUM failed jobs"
+    )
+    job_parser.add_argument(
+        "-t",
+        "--tag",
+        help="Manuelly set tag for the notification request",
+        default=None,
+    )
+
+    # quota command
+    quota_parser = subparsers.add_parser(
+        "quota", help="Notify when certain storage quota usage conditions are met"
+    )
+    quota_parser.add_argument("-c", "--cluster", help="Select quota by cluster")
+    quota_parser.add_argument(
+        "-p",
+        "--percent",
+        type=int,
+        default=90,
+        help="Percentage threshold for the storage quota usage condition (default: 90)",
+    )
+    quota_parser.add_argument(
+        "-r",
+        "--recur",
+        default="1d",
+        help="Resubmit cooldown period for the notification (default: 1d)",
+    )
+    quota_parser.add_argument(
+        "-e",
+        "--email",
+        help="Send email to the given address",
+        default="$EMAIL",
+    )
+    quota_parser.add_argument(
+        "-t",
+        "--tag",
+        help="Manuelly set tag for the notification request",
+        default=None,
+    )
+
+    args = parser.parse_args(expand_combined_flags(sys.argv[1:]))
+    if args.command == "show":
+        xnotify_show(args)
+    elif args.command == "clear":
+        xnotify_clear(args)
+    elif args.command == "job":
+        xnotify_job(args)
+    elif args.command == "quota":
+        xnotify_quota(args)
+    else:
+        raise ValueError(f"Unknown command: {args.command}")
+
+    # TODO:
+    # translate the request to tracked metrics
+    # let the monitor process at one cluster send email
+
+
+if __name__ == "__main__":
+    main()

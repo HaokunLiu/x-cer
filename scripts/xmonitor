@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""
+xmonitor - Start/stop background monitoring daemon
+
+Usage:
+    xmonitor <COMMAND> [OPTIONS]
+
+Commands:
+    start: Start the monitoring daemon
+    stop: Stop the monitoring daemon
+    refresh: Force refresh the monitoring daemon
+"""
+
+import sys
+import argparse
+
+from xcer.commands import xmonitor_main
+from xcer.utils import expand_combined_flags
+
+
+def main():
+    """Main entry point for xmonitor command."""
+    parser = argparse.ArgumentParser(
+        description="Start/stop background monitoring daemon",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument(
+        "action",
+        choices=["start", "stop", "refresh"],
+        help="Action to perform",
+    )
+
+    args = parser.parse_args(expand_combined_flags(sys.argv[1:]))
+    xmonitor_main(args)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""
+xbroadcast - Share directories and files across clusters
+
+Usage:
+    xbroadcast [options] PATH
+
+Examples:
+    xbroadcast -auvz -d cluster1,cluster2,cluster3 /path/to/share (send /path/to/share to cluster1, cluster2, and cluster3)
+    xbroadcast -auvz --del --force -d cluster1 /path/to/share (make /path/to/share in cluster1 exactly the same as local)
+    xbroadcast -auvz --del --force -s cluster1 -d cluster2,cluster3 /path/to/share (sync /path/to/share from cluster1 to cluster2 and cluster3)
+
+Options:
+    -h, --help                       Show help message and exit
+    -s, --source SOURCE              Source cluster name (default: local cluster)
+    -d, --destination DESTINATION    Destination cluster names (default: all active clusters except source), use comma to specify multiple e.g. -d cluster1,cluster2
+    -v, --verbose                    Increase verbosity
+    -a, --archive                    Archive mode equivalent to -rlpto
+    -r, --recursive                  Recurse into directories
+    -l, --links                      Copy symlinks as symlinks
+    -z, --compress                   Compress file data during transfer
+    -p, --preserve-perms             Preserve file permissions
+    -t, --times                      Preserve modification times
+    -O, --omit-dir-times             Omit directories from modification times
+    -u, --update                     Skip files that are newer on receiver
+    --dry-run                        Show what would be transferred without actually doing it
+    --exclude                        Exclude files from transfer, use comma to specify multiple e.g. --exclude file1,file2
+    --include                        Include files from transfer, use comma to specify multiple e.g. --include file1,file2
+    --progress                       Show progress during transfer
+    --partial                        Keep partially transferred files
+    --del                            Receiver deletes extraneous files from destination during the transfer
+    --force                          Force deletion of directories even if not empty
+"""
+
+import sys
+import argparse
+
+from xcer.commands import xbroadcast_main
+from xcer.utils import (
+    expand_combined_flags,
+    maybe_comma_separated_list_str,
+)
+
+
+def main():
+    """Main entry point for xshare command."""
+    parser = argparse.ArgumentParser(
+        description="Share directories and files across clusters",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument("-p", "--path", help="Path to share", required=True)
+    parser.add_argument(
+        "-s",
+        "--source",
+        help="Source cluster name (default: current cluster)",
+        default=None,
+        type=str | None,
+    )
+    parser.add_argument(
+        "-d",
+        "--destination",
+        help="Destination cluster names (comma-separated)",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Increase verbosity"
+    )
+    parser.add_argument(
+        "-a", "--archive", action="store_true", help="Archive mode (-rlpto)"
+    )
+    parser.add_argument(
+        "-r", "--recursive", action="store_true", help="Recurse into directories"
+    )
+    parser.add_argument(
+        "-l", "--links", action="store_true", help="Copy symlinks as symlinks"
+    )
+    parser.add_argument(
+        "-z", "--compress", action="store_true", help="Compress file data"
+    )
+    parser.add_argument(
+        "-p", "--preserve-perms", action="store_true", help="Preserve permissions"
+    )
+    parser.add_argument(
+        "-t", "--times", action="store_true", help="Preserve modification times"
+    )
+    parser.add_argument(
+        "-O", "--omit-dir-times", action="store_true", help="Omit directory times"
+    )
+    parser.add_argument(
+        "-u", "--update", action="store_true", help="Skip newer files on receiver"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be transferred"
+    )
+    parser.add_argument(
+        "--exclude",
+        help="Exclude files from transfer, use comma to specify multiple e.g. --exclude file1,file2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "--include",
+        help="Include files from transfer, use comma to specify multiple e.g. --include file1,file2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "--progress", action="store_true", help="Show progress during transfer"
+    )
+    parser.add_argument("--partial", action="store_true", help="Keep partial transfers")
+    parser.add_argument("--del", action="store_true", help="Delete during transfer")
+    parser.add_argument("--force", action="store_true", help="Force directory deletion")
+
+    args = parser.parse_args(expand_combined_flags(sys.argv[1:]))
+    xbroadcast_main(args)
+    # TODO:
+    # 0. if -s and -d are none, resolve default values
+    # 1. if source is the local cluster, call rsync to broadcast files (always with -u)
+    # 2. if source is not the local cluster, call rsync to collect files from the source cluster to a local temporary directory, and then broadcast to the destination clusters
+
+
+if __name__ == "__main__":
+    main()

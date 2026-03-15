@@ -1,0 +1,11 @@
+personal:
+  - name: mac
+    hostname: Haokuns-MacBook-Air
+    linkdir:
+      - code: ~/Documents/GitHub/
+      - results: ~/Documents/results
+  - name: windows
+    hostname: OmenT
+    linkdir:
+      - code: ~/OneDrive/Projects
+      - results: ~/OneDrive/Desktop/Results

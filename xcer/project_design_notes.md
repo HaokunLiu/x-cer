@@ -1,5 +1,3 @@
-# Cross Cluster Experiment Remote (X-CER)
-
 This is a light weight tool to connect multiple compute clusters with disjoint storage and job management system. It is designed to make full use of Digital Research Alliance of Canada. 
 
 Main goal:
@@ -114,4 +112,3 @@ Information on MongoDB
 
     Notify request DB
 
-    Config DB

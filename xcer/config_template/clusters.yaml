@@ -1,0 +1,40 @@
+clusters:
+  - name: fir
+    hostname: fir.alliancecan.ca
+    user: haokun
+    group_name: def-craffel
+    requires_tunnel: false
+    note: "account def-craffel-gpu and def-craffel-cpu"
+  - name: killarney
+    hostname: killarney.alliancecan.ca
+    user: haokun
+    group_name: aip-craffel
+    requires_tunnel: false
+  - name: narval
+    hostname: narval.alliancecan.ca
+    user: haokun
+    group_name: def-craffel
+    requires_tunnel: true
+    note: "account def-craffel-gpu and def-craffel-cpu"
+  - name: nibi
+    hostname: nibi.alliancecan.ca
+    user: haokun
+    group_name: def-craffel
+    requires_tunnel: false
+  - name: rorqual
+    hostname: rorqual.alliancecan.ca
+    user: haokun
+    group_name: def-craffel
+    requires_tunnel: true
+  - name: trillium
+    hostname: trillium.alliancecan.ca
+    user: haokun
+    group_name: def-craffel
+    requires_tunnel: true
+    internal_login_node: trig-login01
+    note: "use --gpus-per-node=1 rather than --gre, and memory is not allowed"
+  - name: vulcan
+    hostname: vulcan.alliancecan.ca
+    user: haokun
+    group_name: aip-craffel
+    requires_tunnel: true

@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""
+xinfo - Check cluster status and resource availability for the presets.
+(WIP: determine interface after figuring what information to keep)
+
+Usage:
+    xinfo cluster [options]
+    xinfo compute [options]
+
+Examples:
+    xinfo (show [c]luster, [p]reset, [a]llocated GPUs, [i]dle GPUs, [r]equested GPUs, GPU [l]oad factor (a+r)/(a+i) , GPU hour [t]hroughput)
+    xinfo -p 1gpu_48g_12h -c cluster1 (filter by preset and cluster)
+    xinfo --sort l,t (sort by load factor and throughput)
+    xinfo --sort load,throughput (sort by load factor and throughput)
+
+Options:
+    -h, --help             Show help message and exit
+    -c, --cluster CLUSTER  Cluster name to check (default: all active clusters)
+    -p, --preset PRESET    Presets to show, use comma to specify multiple (default: all presets)
+    -s, --sort FIELDS      Comma separated list of fields to sort on
+    -o, --format FORMAT    Output format specificication
+    --table                Show information in a table format
+    --list                 Show information in a list format
+"""
+
+import sys
+import argparse
+
+from xcer.commands import xinfo_main
+from xcer.utils import expand_combined_flags, maybe_comma_separated_list_str
+
+
+def main():
+    """Main entry point for xinfo command."""
+    parser = argparse.ArgumentParser(
+        description="Check cluster status and resource availability for the presets.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument(
+        "-c",
+        "--cluster",
+        help="Cluster name to check (default: all active clusters)",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "-p",
+        "--preset",
+        help="Presets to show, use comma to specify multiple (default: all presets)",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "-s",
+        "--sort",
+        help="Comma separated list of fields to sort on",
+        default="",
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument("-o", "--format", help="Output format specificication")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Refresh rather than using last cached information",
+    )
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="Show help message and exit",
+    )
+
+    args = parser.parse_args(expand_combined_flags(sys.argv[1:]))
+    xinfo_main(args)
+    # TODO:
+    # 0. get info results from wandb
+    # 1. summarize the results
+    # 2. print the results
+
+
+if __name__ == "__main__":
+    main()

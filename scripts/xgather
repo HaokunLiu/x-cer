@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""
+xgather - Gather files from clusters. If there are multiple files with the same name, the latest one will be used.
+
+Usage:
+    xgather [options] PATH
+
+Examples:
+    xgather -avz -s cluster1,cluster2,cluster3 /path/to/collect (gather /path/to/collect from cluster1, cluster2, and cluster3)
+    xgather -avz --del --force -d cluster1 /path/to/collect (make /path/to/collect in cluster1 exactly the same as local)
+    xgather -avz --del --force -s cluster1 -d cluster2,cluster3 /path/to/collect (gather /path/to/collect from cluster1 to cluster2 and cluster3)
+
+Options:
+    -h, --help              Show help message and exit
+    -d, --destination       Destination cluster names (default: current cluster), use comma to specify multiple e.g. -d cluster1,cluster2
+    -s, --source            Source cluster names (default: all active clusters except destination), use comma to specify multiple e.g. -s cluster1,cluster2
+    -v, --verbose           Increase verbosity
+    -a, --archive           Archive mode equivalent to -rlpto
+    -r, --recursive         Recurse into directories
+    -l, --links             Copy symlinks as symlinks
+    -z, --compress          Compress file data during transfer
+    -p, --preserve-perms    Preserve file permissions
+    -t, --times             Preserve modification times
+    -O, --omit-dir-times    Omit directories from modification times
+    --dry-run               Show what would be transferred without actually doing it
+    --exclude               Exclude files from transfer, use comma to specify multiple e.g. --exclude file1,file2
+    --include               Include files from transfer, use comma to specify multiple e.g. --include file1,file2
+    --progress              Show progress during transfer
+    --partial               Keep partially transferred files
+    --remove-source-files   Remove files from the source cluster after transfer
+"""
+
+import sys
+import argparse
+
+from xcer.commands import xgather_main
+from xcer.utils import (
+    expand_combined_flags,
+    maybe_comma_separated_list_str,
+)
+
+
+def main():
+    """Main entry point for xshare command."""
+    parser = argparse.ArgumentParser(
+        description="Collect files from clusters",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument("path", help="Path to collect files", required=True)
+    parser.add_argument(
+        "-d",
+        "--destination",
+        help="Destination cluster names (default: current cluster), use comma to specify multiple e.g. -d cluster1,cluster2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "-s",
+        "--source",
+        help="Source cluster names (default: all active clusters except destination), use comma to specify multiple e.g. -s cluster1,cluster2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Increase verbosity"
+    )
+    parser.add_argument(
+        "-a", "--archive", action="store_true", help="Archive mode (-rlpto)"
+    )
+    parser.add_argument(
+        "-r", "--recursive", action="store_true", help="Recurse into directories"
+    )
+    parser.add_argument(
+        "-l", "--links", action="store_true", help="Copy symlinks as symlinks"
+    )
+    parser.add_argument(
+        "-z", "--compress", action="store_true", help="Compress file data"
+    )
+    parser.add_argument(
+        "-p", "--preserve-perms", action="store_true", help="Preserve permissions"
+    )
+    parser.add_argument(
+        "-t", "--times", action="store_true", help="Preserve modification times"
+    )
+    parser.add_argument(
+        "-O", "--omit-dir-times", action="store_true", help="Omit directory times"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be transferred"
+    )
+    parser.add_argument(
+        "--exclude",
+        help="Exclude files from transfer, use comma to specify multiple e.g. --exclude file1,file2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "--include",
+        help="Include files from transfer, use comma to specify multiple e.g. --include file1,file2",
+        default=None,
+        type=maybe_comma_separated_list_str,
+    )
+    parser.add_argument(
+        "--progress", action="store_true", help="Show progress during transfer"
+    )
+    parser.add_argument("--partial", action="store_true", help="Keep partial transfers")
+    parser.add_argument(
+        "--remove-source-files",
+        action="store_true",
+        help="Remove files from the source cluster after transfer",
+    )
+
+    args = parser.parse_args(expand_combined_flags(sys.argv[1:]))
+    xgather_main(args)
+    # TODO:
+    # 0. if -s and -d are none, resolve default values
+    # 1. if destination is the local cluster, call rsync to gather files (always with -u)
+    # 2. if destination is not the local cluster, call rsync to gather files to a local temporary directory, and then to the destination cluster
+
+
+if __name__ == "__main__":
+    main()

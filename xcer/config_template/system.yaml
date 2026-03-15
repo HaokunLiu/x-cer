@@ -1,0 +1,40 @@
+system_config:
+  heartbeat_interval: 15s
+  refresh_interval: 10m
+  show_ended_job: 7d
+  job_rerun_cooldown: 30m
+  rsync_ignore_list:
+    - ".xcer/"
+    - "__pycache__"
+    - "*.py[cod]"
+    - "*$py.class"
+    - "*.so"
+    - ".Python"
+    - "venv/"
+    - "env/"
+    - "ENV/"
+    - ".venv/"
+    - ".env/"
+    - ".vscode/"
+    - ".idea/"
+    - "*.swp"
+    - "*.swo"
+    - ".DS_Store"
+    - "Thumbs.db"
+    - ".Trash-*"
+    - "tmp/"
+    - "temp/"
+    - ".cache/"
+    - "*.tmp"
+    - "*.temp"
+    - ".pytest_cache/"
+    - "*.pyc"
+    - ".coverage"
+    - ".tox/"
+    - ".nox/"
+    - ".git/"
+    - ".gitignore"
+    - "build/"
+    - "dist/"
+    - "*.egg-info/"
+

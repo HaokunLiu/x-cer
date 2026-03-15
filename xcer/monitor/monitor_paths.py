@@ -1,0 +1,6 @@
+from xcer.paths import MONITOR_ROOT
+
+MONITOR_PID_FOLDER = MONITOR_ROOT / "monitor_pids"
+MONITOR_LOG_FOLDER = MONITOR_ROOT / "logs"
+MONITOR_STATUS_FILE = MONITOR_ROOT / "status.json"
+MONITOR_FORCE_REFRESH_FLAG = MONITOR_ROOT / "force_refresh.tmp"
