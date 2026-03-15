@@ -16,24 +16,6 @@ def expand_combined_flags(argv: list[str]) -> list[str]:
     return expanded
 
 
-def maybe_comma_separated_list_str(s: list[str] | str | None) -> list[str] | str | None:
-    if isinstance(s, list):
-        return s
-    elif isinstance(s, str):
-        if s.lower() == "none":
-            return None
-        list_str = s.split(",")
-        if len(list_str) == 1:
-            return list_str[0]
-        return list_str
-    elif s is None:
-        return None
-    else:
-        raise ValueError(
-            f"Invalid input: {s} (type: {type(s)}, expected list[str] or str)"
-        )
-
-
 def log_or_print(logger, message: str, level: str = "info"):
     """Log message if logger is available, otherwise print."""
     if logger:

@@ -70,37 +70,41 @@ Background process (run on the login node of each cluster, but not on personal d
 
     On detecting config change (checked during refresh), clean up cache states, rerun init.
 
-Commands (some are outdated, refer to docstrings in /scripts for up-to-date definition):
+Commands (see docstrings in xcer/cli/ for details):
 
-    xbroadcast: explicit share a directory, to all clusters by default
+    xcer broadcast: share a directory to all clusters by default
 
-    xgather: collect all log files from all clusters
+    xcer gather: collect files from all clusters (latest modification wins)
 
-    xqueue: check submitted jobs (just the user)
+    xcer queue: check submitted jobs (just the user)
 
-    xcancel: cancel selected jobs (by cluster:job id or by job name)
+    xcer cancel: cancel selected jobs (by cluster:job_id or by job name)
 
-    xinfo: check cluster status (available nodes)
+    xcer info: check cluster status (available nodes)
 
-    xsubmit: submit job to any cluster with free nodes
+    xcer submit: submit job to any cluster with free nodes
 
-    xmonitor: run monitor daemon on login nodes
+    xcer monitor: control monitor daemon on login nodes
 
-    xnotify: nofity user with email
+    xcer notify job: notify user with email when job conditions met
+
+    xcer notify quota: notify user when storage quota exceeds threshold
+
+    xcer notify show/clear: manage notification requests
 
 Local files
 
-    ~/.xcer/linkdir/ stores simlink for linked directories
+    ~/.xcer/linkdirs/ stores symlinks for linked directories
 
-    ~/.xcer/applied_config/ read-only copy of config files
+    ~/.xcer/config/ user-editable config files (clusters.yaml, presets.yaml, system.yaml)
 
-    ~/.xcer/preset_sbatch/ auto generated sbatch script
+    ~/.xcer/preset_sbatch/ auto generated sbatch scripts
 
-    ~/.xcer/identity stores identity of the cluster
+    ~/.xcer/whereami.txt stores identity of the cluster
 
-    ~/.xcer/tunnel stores port information for the internet tunnel
+    ~/.xcer/mongodb_connection_str.txt stores MongoDB connection string
 
-    ~/.xcer/*.yaml user-editable config files (need to apply to take effect)
+    ~/.xcer/monitor/ stores monitor daemon state (PID files, logs)
 
 Information on MongoDB
 

@@ -1,117 +1,198 @@
-# Cross Cluster Experiment Remote (X-CER)
+# X-CER (Cross Cluster Experiment Remote)
 
-This is a light weight tool to connect multiple compute clusters with disjoint storage and job management system. It is designed to make full use of Digital Research Alliance of Canada. 
+Multi-cluster job management for HPC. Submit jobs, sync files, and monitor across clusters from anywhere.
 
-Main goal:
+## Install
 
-    A researcher should be able to launch jobs, monitor jobs from any cluster or a laptop. One job can have multiple acceptable hardware configurations e.g. either L40S in cluster1 or A6000 in cluster2. Different job can have different environment requirement (conda envs, env vars).
+```bash
+pip install -e .
+```
 
-    Design a set of bash and python utility scripts to help running experiments across multiple compute clusters.
+## Setup
 
-    Cluster standardization: create links to standardize path. create customizable presets to standardize gpu types, partition, qos and account.
+### 1. SSH Config
 
-    Job management: squeue, sinfo, scancel, sbatch, but across cluster. (To use interactive session, log on to specific cluster is still necessary)
+Clusters need to SSH to each other for rsync. Add aliases to `~/.ssh/config`:
 
-    File management: broadcast project code, cross cluster cp, gather experiment logs or artifacts. 
+```
+Host cluster1
+    HostName login.cluster1.edu
+    User myuser
+    IdentityFile ~/.ssh/id_ed25519
 
-    Monitor cluster status: Track number of waiting jobs in the queue, top priority, personal and group storage quota.
+Host cluster2
+    HostName login.cluster2.edu
+    User myuser
+    IdentityFile ~/.ssh/id_ed25519
+```
 
-    Setup guide and config guide: Update bashrc to help setting proxy etc.
+Ensure passwordless SSH works between all clusters:
+```bash
+# From cluster1, test SSH to cluster2
+ssh cluster2 hostname
 
-Key concepts:
+# If using Duo/MFA, you may need ControlMaster for connection reuse
+```
 
-    linkdir: a set of path mappings on each cluster, it states things like linkdir scratch should be path_a in cluster1, and should be the same as path_b in cluster 2, so that the user can synchronize any child directory under a linkdir across clusters.
+### 2. MongoDB
 
-    preset: a set of computation requirement and environment setting on each cluster, that include the account, partition, qos for slurm, what type of GPUs to use, how many hours, what special preparation to use (module load, env activate, internet tunnel). The same preset from different cluster should be comparable. A job that can finish on cluster1’s presetX should also be able to finish on cluster2’s presetX.
+X-CER uses MongoDB to track jobs and notifications across clusters. Options:
 
-User journey (one day):
+- **MongoDB Atlas** (recommended): Free tier works fine. Get connection string from Atlas dashboard.
+- **Self-hosted**: Run MongoDB on a server accessible from all clusters.
 
-    ssh to actively used clusters
+Save connection string:
+```bash
+mkdir -p ~/.xcer
+echo "mongodb+srv://user:pass@cluster.mongodb.net/xcer" > ~/.xcer/mongodb_connection_str.txt
+```
 
-    start background process (on servers that will receive jobs)
+### 3. Cluster Identity
 
-    run broadcast to update code
+Each machine needs to know its identity. On each cluster:
+```bash
+echo "cluster1" > ~/.xcer/whereami.txt  # Use actual cluster name
+```
 
-    submit jobs
+### 4. Linked Directories
 
-    realized something is wrong, cancel bunch of jobs
+Clusters mount storage at different paths. Create symlinks to standardize:
 
-    submit jobs again
+```bash
+mkdir -p ~/.xcer/linkdirs
 
-    monitor jobs
+# Example: "scratch" means /scratch/user on cluster1, /home/user/scratch on cluster2
+# On cluster1:
+ln -s /scratch/myuser ~/.xcer/linkdirs/scratch
 
-    gather job outputs
+# On cluster2:
+ln -s /home/myuser/scratch ~/.xcer/linkdirs/scratch
+```
 
-User journey (long term):
+Now `~/.xcer/linkdirs/scratch/myproject` resolves correctly on both clusters.
 
-    Get cluster access
+### 5. Config Files
 
-    Modify cluster yaml
+Create cluster and preset configs:
 
-    Setup script create .xcer folder in this device and all the clusters, copy config to all the clusters, update ssh config
+```bash
+mkdir -p ~/.xcer/config
+```
 
-    Log onto each cluster, run xmonitor.
+`~/.xcer/config/clusters.yaml`:
+```yaml
+clusters:
+  cluster1:
+    hostname: login.cluster1.edu
+    user: myuser
+    group_name: mygroup
+    default_slurm_partition: gpu
+    default_slurm_account: def-mypi
+  cluster2:
+    hostname: login.cluster2.edu
+    user: myuser
+    group_name: mygroup
+    default_slurm_partition: compute
+```
 
-    Run xinfo to understand cluster resources available.
+`~/.xcer/config/presets.yaml`:
+```yaml
+presets:
+  gpu_l40s:
+    description: "1x L40S GPU, 4 hours"
+    clusters: [cluster1, cluster2]
+    slurm_requests: "--gres=gpu:l40s:1 --time=4:00:00 --mem=32G"
+  gpu_a100:
+    description: "1x A100 GPU, 8 hours"
+    clusters: [cluster1]
+    slurm_requests: "--gres=gpu:a100:1 --time=8:00:00 --mem=64G"
+```
 
-    Set up environment on each cluster.  
+`~/.xcer/config/system.yaml`:
+```yaml
+heartbeat_interval: "30s"
+refresh_interval: "5m"
+rsync_ignore_list:
+  - ".git"
+  - "__pycache__"
+  - "*.pyc"
+  - ".venv"
+```
 
-    To add or change settings, modify the config, run xcer apply, the config will be uploaded to the clusters. Upon daemon start, symlinks and sbatch scripts will be updated.
+### 6. Start Monitor Daemon
 
-    To access the cluster from another personal device, copy .xcer and .ssh folder.
+On each cluster's login node (in tmux/screen for persistence):
+```bash
+xcer monitor start
+```
 
-Background process (run on the login node of each cluster, but not on personal device)
+### 7. Copy Setup to Other Machines
 
-    Modify flag file on successful init, and then checks the flag at each heartbeat, self-terminate if the flag belong to another process.
+To use X-CER from another device (laptop, another cluster):
+```bash
+# Copy configs
+scp -r ~/.xcer newmachine:~/
 
-    Almost stateless (all its states are just for speedup, can be reconstructed from other sources)
+# Copy SSH config and keys
+scp ~/.ssh/config newmachine:~/.ssh/
+scp ~/.ssh/id_ed25519* newmachine:~/.ssh/
+```
 
-    On heartbeat (30s), check my own jobs, launch assigned jobs, update job and cluster db
+## Quick Start
 
-    On refresh (15min), check disk quota, check cluster sinfo, check other jobs in the system, update cluster and storage db.
+### Check cluster resources
+```bash
+xcer info                        # Show all clusters and presets
+xcer info -c cluster1 -p gpu_l40s  # Filter
+xcer info --sort load            # Sort by load factor
+```
 
-    On detecting config change (checked during refresh), clean up cache states, rerun init.
+### Submit jobs
+```bash
+xcer submit -p gpu_l40s my_job "python train.py"
+xcer submit -p gpu_l40s -c cluster1,cluster2 my_job "python train.py"
+xcer submit -p gpu_l40s -d data_prep my_job "python train.py"  # with dependency
+```
 
-Commands (some are outdated, refer to docstrings in /scripts for up-to-date definition):
+### Monitor jobs
+```bash
+xcer queue --all      # All ongoing jobs
+xcer queue "train*"   # Filter by name
+xcer queue -r 1d      # Recent jobs (including finished)
+```
 
-    xbroadcast: explicit share a directory, to all clusters by default
+### Cancel jobs
+```bash
+xcer cancel "train*"          # By name pattern
+xcer cancel --all --dry-run   # Preview
+```
 
-    xgather: collect all log files from all clusters
+### Sync files
+```bash
+xcer broadcast -avz /path/to/code                     # To all clusters
+xcer broadcast -avz -d cluster1,cluster2 /path/to/code  # To specific clusters
+xcer gather -avz /path/to/outputs                     # Collect from all
+```
 
-    xqueue: check submitted jobs (just the user)
+### Notifications
+```bash
+xcer notify job --all-done "train*"   # Email when jobs complete
+xcer notify quota -p 90               # Email when quota > 90%
+xcer notify show --all                # Show active notifications
+```
 
-    xcancel: cancel selected jobs (by cluster:job id or by job name)
+## Documentation
 
-    xinfo: check cluster status (available nodes)
+- [DESIGN.md](docs/DESIGN.md) - Goals, key concepts (linkdir, preset), user journeys
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Implementation structure, data flow, MongoDB schemas
 
-    xsubmit: submit job to any cluster with free nodes
+## Requirements
 
-    xmonitor: run monitor daemon on login nodes
+- Python 3.9+
+- MongoDB (Atlas free tier or self-hosted)
+- SSH access between all clusters (passwordless or with ControlMaster)
+- Shared filesystem between clusters (for monitor singleton coordination)
 
-    xnotify: nofity user with email
+## Status
 
-Local files
-
-    ~/.xcer/linkdir/ stores simlink for linked directories
-
-    ~/.xcer/applied_config/ read-only copy of config files
-
-    ~/.xcer/preset_sbatch/ auto generated sbatch script
-
-    ~/.xcer/identity stores identity of the cluster
-
-    ~/.xcer/tunnel stores port information for the internet tunnel
-
-    ~/.xcer/*.yaml user-editable config files (need to apply to take effect)
-
-Information on MongoDB
-
-    Job DB (indexed by issuer:job_id)
-
-    Cluster status DB
-
-    Storage status DB
-
-    Notify request DB
-
-    Config DB
+Work in progress. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for implementation plan.

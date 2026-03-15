@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "x-cer"
+version = "0.1.0"
+description = "Cross Cluster Experiment Remote - Multi-cluster job management for HPC environments"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Haokun Liu"}
+]
+keywords = ["hpc", "slurm", "cluster", "job-management", "rsync"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Clustering",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    "typer[all]>=0.9.0",
+    "pexpect>=4.8.0",
+    "pymongo>=4.0.0",
+    "pytimeparse>=1.1.8",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+xcer = "xcer.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/haokunl/x-cer"
+Repository = "https://github.com/haokunl/x-cer"
+Issues = "https://github.com/haokunl/x-cer/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["xcer*"]
+
+[tool.setuptools.package-data]
+xcer = ["config_template/*.yaml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

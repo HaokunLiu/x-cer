@@ -150,6 +150,7 @@ if __name__ == "__main__":
     # dests = ["killarney", "vulcan", "fir", "trillium"]
     # dests = ["killarney", "vulcan", "fir", "trillium_gate", "narval", "nibi", "rorqual"]
 
+    # TEMPORARY
     if arg0 == "send":
         rsync_commands = {
             f"{hostname} -> {dest}": f"rsync -auvz --exclude='.git' --exclude='.venv' /Users/haokunl/Documents/GitHub/moose {dest}:~/s/code"
