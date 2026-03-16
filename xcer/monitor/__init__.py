@@ -1,5 +1,17 @@
 """Monitor package for background daemon functionality."""
 
-from .daemon import Monitor
+from .daemon import MonitorBackbone
+from . import heartbeat
+from . import refresh
+from . import alerts
 
-__all__ = ["Monitor"]
+# Alias for backward compatibility
+Monitor = MonitorBackbone
+
+__all__ = [
+    "MonitorBackbone",
+    "Monitor",
+    "heartbeat",
+    "refresh",
+    "alerts",
+]

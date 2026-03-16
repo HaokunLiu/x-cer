@@ -11,6 +11,8 @@ from typing_extensions import Annotated
 
 import typer
 
+from xcer.mongo import get_mongodb_client
+from xcer.services import info as info_service
 from .common import Cluster, Preset, parse_comma_list
 
 
@@ -54,15 +56,25 @@ def info(
         # Force refresh (don't use cache)
         xcer info --refresh
     """
-    from xcer.core.clusters import get_cluster_info
+    client = get_mongodb_client()
 
-    get_cluster_info(
-        clusters=parse_comma_list(cluster),
-        presets=parse_comma_list(preset),
-        sort_fields=parse_comma_list(sort),
-        format_spec=format_,
-        refresh=refresh,
-    )
+    # Determine sort key
+    sort_by = "name"
+    if sort:
+        sort_fields = parse_comma_list(sort)
+        if sort_fields:
+            # Map short names to full names
+            sort_map = {"l": "load", "i": "idle", "t": "jobs", "j": "jobs"}
+            sort_by = sort_map.get(sort_fields[0], sort_fields[0])
+
+    if refresh:
+        # Force refresh stats from clusters
+        from xcer.monitor import refresh as refresh_module
+        refresh_module.process_refresh(client)
+
+    # Get info with stats
+    info_list = info_service.get_all_info_with_stats(client, sort_by=sort_by)
+    typer.echo(info_service.format_info_with_stats(info_list))
 
 
 def monitor(
@@ -91,12 +103,20 @@ def monitor(
         xcer monitor stop
         xcer monitor refresh
     """
-    from xcer.monitor import Monitor
+    from xcer.monitor import MonitorBackbone
+    from xcer.config import load_system_config
 
-    m = Monitor()
     if action == "start":
-        m.start()
+        try:
+            config = load_system_config()
+            m = MonitorBackbone()
+            m.start_daemon(config)
+        except RuntimeError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
     elif action == "stop":
-        m.stop()
+        MonitorBackbone.end_all_instances()
+        typer.echo("Monitor stopped")
     elif action == "refresh":
-        m.refresh()
+        MonitorBackbone.request_refresh()
+        typer.echo("Refresh requested")

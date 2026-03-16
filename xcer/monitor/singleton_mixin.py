@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from abc import ABC, abstractmethod
 from glob import glob
-from monitor.monitor_paths import MONITOR_PID_FOLDER
+from xcer.monitor.monitor_paths import MONITOR_PID_FOLDER
 
 from xcer.utils import safe_touch, safe_remove
 

@@ -11,6 +11,7 @@ from typing_extensions import Annotated
 
 import typer
 
+from xcer.services import sync as sync_service
 from .common import DryRun, Verbose, parse_comma_list
 
 
@@ -60,29 +61,56 @@ def broadcast(
         -z  Compress during transfer
         -u  Skip files newer on receiver
     """
-    from xcer.core.rsync import broadcast_files
+    # Build rsync flags
+    flags = []
+    if archive:
+        flags.append("-a")
+    if verbose:
+        flags.append("-v")
+    if compress:
+        flags.append("-z")
+    if update:
+        flags.append("-u")
+    if recursive and not archive:
+        flags.append("-r")
+    if links and not archive:
+        flags.append("-l")
+    if preserve_perms and not archive:
+        flags.append("-p")
+    if times and not archive:
+        flags.append("-t")
+    if omit_dir_times:
+        flags.append("-O")
+    if delete:
+        flags.append("--delete")
+    if force:
+        flags.append("--force")
+    if progress:
+        flags.append("--progress")
+    if partial:
+        flags.append("--partial")
 
-    broadcast_files(
-        path=path,
-        source=source,
-        destinations=parse_comma_list(destination),
-        archive=archive,
-        verbose=verbose,
-        compress=compress,
-        update=update,
-        recursive=recursive,
-        links=links,
-        preserve_perms=preserve_perms,
-        times=times,
-        omit_dir_times=omit_dir_times,
-        dry_run=dry_run,
-        delete=delete,
-        force=force,
-        excludes=parse_comma_list(exclude),
-        includes=parse_comma_list(include),
-        progress=progress,
-        partial=partial,
-    )
+    rsync_flags = " ".join(flags) if flags else "-avz"
+    excludes = parse_comma_list(exclude)
+    destinations = parse_comma_list(destination)
+
+    try:
+        results = sync_service.broadcast(
+            source_path=path,
+            cluster_names=destinations,
+            rsync_flags=rsync_flags,
+            exclude=excludes,
+            dry_run=dry_run,
+        )
+
+        # Report results
+        success = sum(1 for code in results.values() if code == 0)
+        failed = len(results) - success
+        typer.echo(f"Broadcast complete: {success} succeeded, {failed} failed")
+
+    except sync_service.SyncError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
 
 def gather(
@@ -133,24 +161,49 @@ def gather(
         -v  Verbose output
         -z  Compress during transfer
     """
-    from xcer.core.rsync import gather_files
+    # Build rsync flags
+    flags = []
+    if archive:
+        flags.append("-a")
+    if verbose:
+        flags.append("-v")
+    if compress:
+        flags.append("-z")
+    if recursive and not archive:
+        flags.append("-r")
+    if links and not archive:
+        flags.append("-l")
+    if preserve_perms and not archive:
+        flags.append("-p")
+    if times and not archive:
+        flags.append("-t")
+    if omit_dir_times:
+        flags.append("-O")
+    if progress:
+        flags.append("--progress")
+    if partial:
+        flags.append("--partial")
+    if remove_source:
+        flags.append("--remove-source-files")
 
-    gather_files(
-        path=path,
-        sources=parse_comma_list(source),
-        destination=destination,
-        archive=archive,
-        verbose=verbose,
-        compress=compress,
-        recursive=recursive,
-        links=links,
-        preserve_perms=preserve_perms,
-        times=times,
-        omit_dir_times=omit_dir_times,
-        dry_run=dry_run,
-        excludes=parse_comma_list(exclude),
-        includes=parse_comma_list(include),
-        progress=progress,
-        partial=partial,
-        remove_source=remove_source,
-    )
+    rsync_flags = " ".join(flags) if flags else "-avz"
+    excludes = parse_comma_list(exclude)
+    sources = parse_comma_list(source)
+
+    try:
+        results = sync_service.gather(
+            source_path=path,
+            cluster_names=sources,
+            rsync_flags=rsync_flags,
+            exclude=excludes,
+            dry_run=dry_run,
+        )
+
+        # Report results
+        success = sum(1 for code in results.values() if code == 0)
+        failed = len(results) - success
+        typer.echo(f"Gather complete: {success} succeeded, {failed} failed")
+
+    except sync_service.SyncError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)

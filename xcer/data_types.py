@@ -1,30 +1,55 @@
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum, auto
 
 
 @dataclass
 class ClusterInfo:
-    cluster_name: str
+    name: str
     hostname: str
     user: str
-    group_name: str  # Might want to remove
+    group_name: str
     requires_tunnel: bool = False
+    internal_login_node: str | None = None  # For two-hop SSH clusters
+    note: str | None = None
     default_slurm_partition: str | None = None
     default_slurm_account: str | None = None
     default_slurm_qos: str | None = None
-    filesystem_access: dict[str, str] | None = None
+
+
+@dataclass
+class PresetClusterConfig:
+    """Cluster-specific overrides for a preset."""
+    available: bool = True
+    partition: str | None = None
+    qos: str | None = None
+    account: str | None = None
+
+
+@dataclass
+class PresetBase:
+    """Base hardware configuration for a preset."""
+    time: str | None = None
+    mem: str | None = None
+    cpus_per_task: int | None = None
+    gres: str | None = None
 
 
 @dataclass
 class PresetInfo:
-    preset_name: str
-    cluster_name: str
-    description: str
-    slurm_requests: str
-    slurm_partition: str | None = None
-    slurm_account: str | None = None
-    slurm_qos: str | None = None
+    """Hardware preset with base config and cluster-specific overrides."""
+    name: str
+    base: PresetBase
+    cluster_configs: dict[str, PresetClusterConfig] = field(default_factory=dict)
+
+
+@dataclass
+class EnvironmentInfo:
+    """Software environment preset."""
+    name: str
+    conda_env: str | None = None
+    modules: list[str] = field(default_factory=list)
+    env_vars: dict[str, str] = field(default_factory=dict)
 
 
 class SlurmJobState(Enum):
@@ -86,8 +111,17 @@ class Job:
     issued_by: str  # Can be a cluster or personal device
     slurm_status: SlurmJobState
     next_action: NextAction
+    slurm_id: str | None = None  # Assigned after sbatch
+    submitted_at: datetime | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    exit_code: int | None = None
     resubmit_on_fail: bool = False
     max_resubmits: int = 0
+    resubmit_count: int = 0
+    dependency_job_name: str | None = None  # For job dependencies
+    work_dir: str | None = None  # Working directory for the job
+    command: str | None = None  # The command to run
 
 
 @dataclass

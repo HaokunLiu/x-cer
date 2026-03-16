@@ -305,13 +305,72 @@ presets:
 
 ### `~/.xcer/config/system.yaml`
 ```yaml
-heartbeat_interval: "30s"
-refresh_interval: "5m"
-show_ended_job: "1d"
-job_rerun_cooldown: "10m"
-rsync_ignore_list:
-  - ".git"
-  - "__pycache__"
-  - "*.pyc"
-  - ".venv"
+system_config:
+  heartbeat_interval: 15s
+  refresh_interval: 10m
+  show_ended_job: 7d
+  job_rerun_cooldown: 30m
+  rsync_ignore_list:
+    - ".xcer/"
+    - "__pycache__"
+    - "*.pyc"
+    - ".git/"
+    - ".venv/"
 ```
+
+## Design Decisions
+
+### Config Format
+Config loader must match the actual YAML structure in `config_template/`:
+- `clusters.yaml`: List format with `name` field, not dict keyed by name
+- `presets.yaml`: Has `base:` + `cluster_configs:` + `environments:` sections
+- `system.yaml`: Nested under `system_config:` key
+
+### Job Class Extensions
+The `Job` dataclass needs additional fields for tracking:
+```python
+@dataclass
+class Job:
+    job_name: str
+    preset: str
+    cluster_name: str
+    issued_by: str
+    slurm_status: SlurmJobState
+    next_action: NextAction
+    slurm_id: str | None = None        # Assigned after sbatch
+    submitted_at: datetime | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    exit_code: int | None = None
+    resubmit_on_fail: bool = False
+    max_resubmits: int = 0
+    resubmit_count: int = 0
+    dependency_job_name: str | None = None  # For job dependencies
+```
+
+### Email Notifications
+Use the cluster's built-in `mail` command for sending notifications:
+```bash
+echo "Job train_v1 completed" | mail -s "X-CER Alert" user@example.com
+```
+This avoids SMTP configuration and works on any standard HPC cluster.
+
+### Internet Tunnel (requires_tunnel)
+Some clusters only have internet access on login nodes. Compute nodes must proxy through login:
+- **Daemon on login node**: Sets up proxy/tunnel for compute nodes
+- **Job sbatch script**: Adds setup commands at start to use tunnel
+- When `requires_tunnel: true`, the job script gets tunnel configuration injected
+
+### Internal Login Node
+Some clusters (like `trillium`) have an `internal_login_node` field. This is for two-hop SSH:
+```
+local → trillium.alliancecan.ca → trig-login01
+```
+
+### Interactive Mode
+When user requests interactive session (`xcer interactive`):
+1. Submit salloc/srun request to ALL active clusters with the selected preset
+2. Show real-time status as clusters allocate (which have pending, which allocated)
+3. User selects which allocated cluster to use
+4. Display SSH connection command for selected cluster
+5. Cancel all other pending/allocated interactive jobs

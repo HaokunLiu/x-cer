@@ -7,9 +7,12 @@ Manage email notification requests for job and quota conditions.
 from typing import Optional
 
 from typing_extensions import Annotated
+from pytimeparse import parse as parse_time
 
 import typer
 
+from xcer.mongo import get_mongodb_client
+from xcer.services import notify as notify_service
 from .common import Cluster, Preset, parse_comma_list
 
 
@@ -24,9 +27,14 @@ def show(
         xcer notify show --all
         xcer notify show --tag "job*"
     """
-    from xcer.core.notifications import show_notifications
+    client = get_mongodb_client()
+    notifications = notify_service.list_notifications(client, include_disabled=all_)
 
-    show_notifications(tag=tag, show_all=all_)
+    if not notifications:
+        typer.echo("No notifications configured")
+        return
+
+    typer.echo(notify_service.format_notifications_table(notifications))
 
 
 def clear(
@@ -40,9 +48,24 @@ def clear(
         xcer notify clear --all
         xcer notify clear --tag "job*"
     """
-    from xcer.core.notifications import clear_notifications
+    client = get_mongodb_client()
 
-    clear_notifications(tag=tag, clear_all=all_)
+    if tag:
+        deleted = notify_service.delete_notification(client, tag)
+        if deleted:
+            typer.echo(f"Deleted notification: {tag}")
+        else:
+            typer.echo(f"Notification not found: {tag}", err=True)
+    elif all_:
+        notifications = notify_service.list_notifications(client, include_disabled=True)
+        count = 0
+        for n in notifications:
+            if notify_service.delete_notification(client, n.tag):
+                count += 1
+        typer.echo(f"Deleted {count} notification(s)")
+    else:
+        typer.echo("Specify --tag or --all", err=True)
+        raise typer.Exit(1)
 
 
 def job(
@@ -100,24 +123,45 @@ def job(
         # Filter by preset
         xcer notify job --all-done -p gpu_l40s
     """
-    from xcer.core.notifications import notify_on_job
+    client = get_mongodb_client()
+    clusters_list = parse_comma_list(cluster)
 
-    notify_on_job(
-        id_or_name=id_or_name,
-        by_name=name,
-        by_id=id_,
-        preset=preset,
-        clusters=parse_comma_list(cluster),
-        recur=recur,
-        email=email,
-        tag=tag,
-        all_done=all_done,
-        any_done=any_done,
-        num_done=num_done,
-        any_failed=any_failed,
-        all_failed=all_failed,
-        num_failed=num_failed,
-    )
+    if not any([all_done, any_done, num_done, any_failed, all_failed, num_failed]):
+        typer.echo("Specify at least one condition flag (--all-done, --any-failed, etc.)", err=True)
+        raise typer.Exit(1)
+
+    if not email:
+        typer.echo("Email address required (--email)", err=True)
+        raise typer.Exit(1)
+
+    # Generate tag if not provided
+    notification_tag = tag or f"job_{id_or_name[0][:20]}"
+
+    # Parse recur interval
+    recur_hours = None
+    if recur:
+        seconds = parse_time(recur)
+        if seconds:
+            recur_hours = seconds / 3600
+
+    try:
+        notif = notify_service.create_job_notification(
+            client=client,
+            tag=notification_tag,
+            email=email,
+            job_patterns=id_or_name,
+            clusters=clusters_list,
+            all_done=all_done,
+            any_failed=any_failed,
+            any_timeout=False,
+            recur_hours=recur_hours,
+        )
+        typer.echo(f"Created notification: {notif.tag}")
+        typer.echo(f"  Email: {notif.email}")
+        typer.echo(f"  Patterns: {', '.join(id_or_name)}")
+    except notify_service.NotifyError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
 
 def quota(
@@ -148,12 +192,29 @@ def quota(
         # Check more frequently
         xcer notify quota -p 95 -r 12h
     """
-    from xcer.core.notifications import notify_on_quota
+    client = get_mongodb_client()
 
-    notify_on_quota(
-        clusters=parse_comma_list(cluster),
-        percent=percent,
-        recur=recur,
+    if not email:
+        typer.echo("Email address required (--email)", err=True)
+        raise typer.Exit(1)
+
+    # Generate tag if not provided
+    notification_tag = tag or f"quota_{percent}pct"
+
+    # Parse recur interval
+    recur_hours = 24.0
+    if recur:
+        seconds = parse_time(recur)
+        if seconds:
+            recur_hours = seconds / 3600
+
+    notif = notify_service.create_quota_notification(
+        client=client,
+        tag=notification_tag,
         email=email,
-        tag=tag,
+        threshold_percent=float(percent),
+        recur_hours=recur_hours,
     )
+    typer.echo(f"Created notification: {notif.tag}")
+    typer.echo(f"  Email: {notif.email}")
+    typer.echo(f"  Threshold: {percent}%")

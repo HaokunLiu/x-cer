@@ -6,12 +6,18 @@ queue - Check submitted jobs across clusters
 cancel - Cancel jobs across clusters
 """
 
+from datetime import timedelta
 from typing import Optional
 
 from typing_extensions import Annotated
+from pytimeparse import parse as parse_time
 
 import typer
 
+from xcer.mongo import get_mongodb_client
+from xcer.services import submit as submit_service
+from xcer.services import queue as queue_service
+from xcer.services import cancel as cancel_service
 from .common import Cluster, Preset, DryRun, parse_comma_list
 
 
@@ -62,19 +68,43 @@ def submit(
         load         Prefer clusters with lowest load factor (default)
         throughput   Prefer clusters with highest throughput
     """
-    from xcer.core.jobs import submit_job
+    client = get_mongodb_client()
+    clusters_list = parse_comma_list(cluster)
+    command = " ".join(executable)
 
-    submit_job(
-        name=name,
-        executable=executable,
-        preset=preset,
-        clusters=parse_comma_list(cluster),
-        dependencies=parse_comma_list(dependency),
-        routing=routing,
-        dry_run=dry_run,
-        retry=retry,
-        interactive=interactive,
-    )
+    if dry_run:
+        typer.echo(f"[DRY RUN] Would submit job '{name}' with preset '{preset}'")
+        typer.echo(f"  Command: {command}")
+        if clusters_list:
+            typer.echo(f"  Clusters: {', '.join(clusters_list)}")
+        typer.echo(f"  Routing: {routing}")
+        if dependency:
+            typer.echo(f"  Dependency: {dependency}")
+        return
+
+    if interactive:
+        # TODO: Implement interactive mode - submit to all clusters, show allocation, let user choose
+        typer.echo("Interactive mode not yet implemented", err=True)
+        raise typer.Exit(1)
+
+    try:
+        job = submit_service.submit_job(
+            client=client,
+            job_name=name,
+            preset_name=preset,
+            command=command,
+            cluster_names=clusters_list,
+            dependency=dependency,
+            resubmit_on_fail=retry > 0,
+            max_resubmits=retry,
+            strategy=routing,
+        )
+        typer.echo(f"Submitted job '{job.job_name}' to {job.cluster_name}")
+        typer.echo(f"  Preset: {job.preset}")
+        typer.echo(f"  Status: {job.next_action.name} (waiting for monitor)")
+    except submit_service.SubmitError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
 
 def queue(
@@ -121,19 +151,34 @@ def queue(
         xcer queue -t running
         xcer queue -t pending
     """
-    from xcer.core.jobs import list_queue
+    client = get_mongodb_client()
+    clusters_list = parse_comma_list(cluster)
 
-    list_queue(
-        id_or_name=id_or_name,
-        clusters=parse_comma_list(cluster),
-        by_name=name,
-        by_id=id_,
-        state=state,
-        preset=preset,
-        aggregate=aggregate,
-        recent=recent,
-        show_all=all_,
+    # Parse recent time
+    include_recent = None
+    if recent:
+        seconds = parse_time(recent)
+        if seconds:
+            include_recent = timedelta(seconds=seconds)
+
+    # Determine name pattern
+    name_pattern = None
+    if id_or_name and not id_:
+        name_pattern = id_or_name
+
+    jobs = queue_service.list_jobs(
+        client=client,
+        name_pattern=name_pattern,
+        cluster_names=clusters_list,
+        active_only=all_ and not recent,
+        include_recent=include_recent,
     )
+
+    if not jobs:
+        typer.echo("No jobs found")
+        return
+
+    typer.echo(queue_service.format_job_table(jobs))
 
 
 def cancel(
@@ -181,18 +226,36 @@ def cancel(
         # Force treat as name (when name looks like ID)
         xcer cancel -n host:123456
     """
-    from xcer.core.jobs import cancel_jobs
+    client = get_mongodb_client()
+    clusters_list = parse_comma_list(cluster)
 
-    cancel_jobs(
-        id_or_name=id_or_name,
-        clusters=parse_comma_list(cluster),
-        by_name=name,
-        by_id=id_,
-        state=state,
-        preset=preset,
-        aggregate=aggregate,
-        rollback=rollback,
-        delete_from_db=delete,
-        cancel_all=all_,
-        dry_run=dry_run,
-    )
+    # Determine name pattern
+    name_pattern = None
+    if id_or_name and not id_:
+        name_pattern = id_or_name
+    elif all_:
+        name_pattern = "*"
+
+    if not name_pattern and not all_:
+        typer.echo("Specify a job pattern or use --all", err=True)
+        raise typer.Exit(1)
+
+    try:
+        jobs = cancel_service.cancel_jobs(
+            client=client,
+            name_pattern=name_pattern,
+            cluster_names=clusters_list,
+            dry_run=dry_run,
+        )
+
+        if dry_run:
+            typer.echo(f"[DRY RUN] Would cancel {len(jobs)} job(s):")
+        else:
+            typer.echo(f"Cancelled {len(jobs)} job(s):")
+
+        for job in jobs:
+            typer.echo(f"  {job.job_name} on {job.cluster_name}")
+
+    except cancel_service.CancelError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)

@@ -10,10 +10,14 @@ import subprocess
 from pathlib import Path
 from pytimeparse import parse as parse_time
 from xcer.data_types import SystemConfig
+from xcer.mongo import get_mongodb_client
 from xcer.utils import safe_touch
 from .monitor_paths import MONITOR_LOG_FOLDER, MONITOR_FORCE_REFRESH_FLAG
 from .singleton_mixin import SingletonMixin
 from .session_utils import warn_if_not_background, start_detached
+from . import heartbeat as heartbeat_module
+from . import refresh as refresh_module
+from . import alerts as alerts_module
 
 
 class MonitorBackbone(SingletonMixin):
@@ -112,13 +116,36 @@ class MonitorBackbone(SingletonMixin):
 
     def on_heartbeat(self):
         """Called periodically for heartbeat operations"""
-        self._logger.info("Heartbeat")
-        # Touch the PID file to indicate we're alive
+        self._logger.info("Heartbeat starting")
+        try:
+            client = get_mongodb_client()
+            results = heartbeat_module.process_heartbeat(client, self._logger)
+            self._logger.info(
+                f"Heartbeat complete: {results['submitted']} submitted, "
+                f"{results['resubmitted']} resubmitted, {results['cancelled']} cancelled, "
+                f"{results['state_updates']} updated, {results['errors']} errors"
+            )
+
+            # Also process alerts during heartbeat
+            alert_results = alerts_module.process_alerts(client, self._logger)
+            if alert_results['triggered'] > 0:
+                self._logger.info(f"Alerts: {alert_results['triggered']} triggered")
+
+        except Exception as e:
+            self._logger.error(f"Heartbeat error: {e}")
 
     def on_refresh(self):
         """Called periodically for refresh operations"""
-        self._logger.info("Refresh")
-        # TODO: Implement refresh logic
+        self._logger.info("Refresh starting")
+        try:
+            client = get_mongodb_client()
+            results = refresh_module.process_refresh(client, self._logger)
+            self._logger.info(
+                f"Refresh complete: {results['clusters_updated']} clusters updated, "
+                f"{results['errors']} errors"
+            )
+        except Exception as e:
+            self._logger.error(f"Refresh error: {e}")
 
     def start_daemon(self, config: SystemConfig, detached: bool = True):
         """Start the monitoring daemon as a background process"""
